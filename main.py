@@ -90,7 +90,7 @@ for batch_idx, (x, seg) in enumerate(loader):
         img_foreground=foreground[k,:,:,:]
         save_image(img_foreground,"../../Output/img_%03d_foreground.jpg"%img_index)
         img_background=background[k,:,:,:]
-        save_image(img_background,"../../output/img_%03d_background.jpg"%img_index)
+        save_image(img_background,"../../Output/img_%03d_background.jpg"%img_index)
         img_index+=1
 
 
