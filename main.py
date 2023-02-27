@@ -22,17 +22,27 @@ parser.add_argument('--lmbda', type=float, default=0.001)
 parser.add_argument('--scale-factor', type=int, default=1)
 parser.add_argument('--device',  type=str, default='cuda')
 args = parser.parse_args()
-
-transform = transforms.Compose([
+transformsList=[
     transforms.Resize(args.size, transforms.InterpolationMode.NEAREST),
     transforms.CenterCrop(args.size),
-    transforms.ToTensor()
-])
+    
+]
+
 
 
 if args.dataset_type=="morphle":
+    from torchvision.utils import save_image
+    transformsList.append(transforms.ToTensor())
+    transform = transforms.Compose(transformsList)
     data = MorphleDataset(args.data_path,"test",transform)
+elif args.dataset_type=="morphle-lab":
+    from utils import save_image
+    transform = transforms.Compose(transformsList)
+    data = MorphleLabDataset(args.data_path,"test",transform)
 else:
+    from torchvision.utils import save_image
+    transformsList.append(transforms.ToTensor())
+    transform = transforms.Compose(transformsList)
     data = FlowersDataset(args.data_path, 'test', transform)
 loader = DataLoader(data, batch_size=args.batch_size, shuffle=False, num_workers=0, pin_memory=True)
 
@@ -72,7 +82,8 @@ for batch_idx, (x, seg) in enumerate(loader):
         with torch.no_grad():
             grad = mask.grad.data
             # we only update mask pixels that are in the boundary AND have non-zero gradient
-            update_bool = boundary(mask) * (grad != 0)
+            #update_bool = boundary(mask) * (grad != 0)
+            update_bool= (grad != 0)
             
             # pixels with positive gradients are set to 1 and with negative gradients are set to 0
             mask.data[update_bool] = (grad[update_bool] > 0).float()
@@ -89,8 +100,11 @@ for batch_idx, (x, seg) in enumerate(loader):
         save_image(x[k,:,:,:],"../../Output/img_%03d.jpg"%img_index)
         img_foreground=foreground[k,:,:,:]
         save_image(img_foreground,"../../Output/img_%03d_foreground.jpg"%img_index)
+        save_image((pred_foreground*mask)[k,:,:,:],"../../Output/img_%03d_foreground_pred.jpg"%img_index)
         img_background=background[k,:,:,:]
         save_image(img_background,"../../Output/img_%03d_background.jpg"%img_index)
+        
+        save_image((pred_background*(1-mask))[k,:,:,:],"../../Output/img_%03d_background_pred.jpg"%img_index)
         img_index+=1
 
 
