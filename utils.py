@@ -16,7 +16,7 @@ def lab_to_pil(_tensor):
 def save_image(lab,save_file):
     _tensor=lab_to_pil(lab).movedim(0,-1)
     
-    Lab=Image.fromarray(_tensor.detach().numpy())
+    Lab=Image.fromarray(_tensor.detach().cpu().numpy())
     
     roundTrip=ImageCms.applyTransform(Lab,lab2rgb)
     roundTrip.save(save_file)
