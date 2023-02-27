@@ -5,13 +5,16 @@ from torch.utils.data import DataLoader
 from metrics import *
 from models import *
 from datasets import *
+from torchvision.utils import save_image
+
 
 parser = argparse.ArgumentParser(description='Inpainting Error Maximization')
 parser.add_argument('data_path', type=str)
+parser.add_argument('--dataset-type',type=str,default='morphle')
 parser.add_argument('--size', type=int, default=128)
 parser.add_argument('--split', type=str, default='test')
 parser.add_argument('--batch-size', type=int, default=1020)
-parser.add_argument('--iters', type=int, default=150)
+parser.add_argument('--iters', type=int, default=600)
 parser.add_argument('--sigma', type=float, default=5.0)
 parser.add_argument('--kernel-size', type=int, default=11)
 parser.add_argument('--reps', type=int, default=2)
@@ -26,8 +29,12 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-data = FlowersDataset(args.data_path, 'test', transform)
-loader = DataLoader(data, batch_size=args.batch_size, shuffle=False, num_workers=2, pin_memory=True)
+
+if args.dataset_type=="morphle":
+    data = MorphleDataset(args.data_path,"test",transform)
+else:
+    data = FlowersDataset(args.data_path, 'test', transform)
+loader = DataLoader(data, batch_size=args.batch_size, shuffle=False, num_workers=0, pin_memory=True)
 
 # naive inpainting module that uses a Gaussian filter to predict values of masked out pixels
 inpainter = Inpainter(args.sigma, args.kernel_size, args.reps, args.scale_factor).to(args.device)
@@ -35,6 +42,7 @@ inpainter = Inpainter(args.sigma, args.kernel_size, args.reps, args.scale_factor
 boundary = Boundary().to(args.device)
 
 start_time = time.time()
+img_index=0
 for batch_idx, (x, seg) in enumerate(loader):
     print(len(x))
     print("Batch {}/{}".format(batch_idx+1, len(loader)))
@@ -71,9 +79,19 @@ for batch_idx, (x, seg) in enumerate(loader):
             
             # smoothing procedure: we set a pixel to 1 if there are 4 or more 1-valued pixels in its 3x3 neighborhood
             mask.data = (F.avg_pool2d(mask, 3, 1, 1, divisor_override=1) >= 4).float()
-
+            
             acc, iou, miou, dice = compute_performance(mask, seg)
             print("\tIter {:>3}: InpError {:.3f} IoU {:.3f} DICE {:.3f}".format(i, inp_error.mean().item(), iou, dice))
+        
+    
+    for k in range(foreground.shape[0]):
+        
+        img_foreground=foreground[k,:,:,:]
+        img_background=background[k,:,:,:]
+        save_image(img_foreground,"../../Output/img_%03d_foreground.jpg"%img_index)
+        save_image(img_background,"../../output/img_%03d_background.jpg"%img_index)
+        img_index+=1
+
 
 end_time = time.time()
 print("IEM finished in {:.1f} seconds".format(end_time-start_time))
