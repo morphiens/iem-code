@@ -14,7 +14,7 @@ parser.add_argument('--dataset-type',type=str,default='morphle')
 parser.add_argument('--size', type=int, default=128)
 parser.add_argument('--split', type=str, default='test')
 parser.add_argument('--batch-size', type=int, default=1020)
-parser.add_argument('--iters', type=int, default=600)
+parser.add_argument('--iters', type=int, default=300)
 parser.add_argument('--sigma', type=float, default=5.0)
 parser.add_argument('--kernel-size', type=int, default=11)
 parser.add_argument('--reps', type=int, default=2)
@@ -73,6 +73,7 @@ for batch_idx, (x, seg) in enumerate(loader):
             grad = mask.grad.data
             # we only update mask pixels that are in the boundary AND have non-zero gradient
             update_bool = boundary(mask) * (grad != 0)
+            
             # pixels with positive gradients are set to 1 and with negative gradients are set to 0
             mask.data[update_bool] = (grad[update_bool] > 0).float()
             grad.zero_()
@@ -85,10 +86,10 @@ for batch_idx, (x, seg) in enumerate(loader):
         
     
     for k in range(foreground.shape[0]):
-        
+        save_image(x[k,:,:,:],"../../Output/img_%03d.jpg"%img_index)
         img_foreground=foreground[k,:,:,:]
-        img_background=background[k,:,:,:]
         save_image(img_foreground,"../../Output/img_%03d_foreground.jpg"%img_index)
+        img_background=background[k,:,:,:]
         save_image(img_background,"../../output/img_%03d_background.jpg"%img_index)
         img_index+=1
 

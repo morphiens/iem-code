@@ -15,8 +15,9 @@ class MorphleDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.files)
     def __getitem__(self, idx):
-        img_path = "%s/pre-processed/uncropped.jpg" % self.files[idx]
-        seg_path = "%s/pre-processed/overlayed_mask_for_focus_level_0.jpg" % self.files[idx]
+        _root=self.files[idx].replace("/pre-processed/rpi_images/x1y0.jpg","")
+        img_path = "%s/pre-processed/rpi_images/x1y0.jpg" % _root
+        seg_path = "%s/pre-processed/overlayed_mask_for_focus_level_0.jpg" % _root
         img = self.transform(Image.open(img_path))
         
         
