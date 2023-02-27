@@ -9,11 +9,22 @@ import glob
 class MorphleDataset(torch.utils.data.Dataset):
     def __init__(self, dataPath, sets='train', transform=transforms.ToTensor()):
         super(MorphleDataset, self).__init__()
-        self.files = list(glob.glob(dataPath)) 
+        files = list(glob.glob(dataPath))
+        self.files =list(filter(lambda p:os.path.exists(self.get_mask_path(p)),files))
         self.transform = transform
         self.datapath = dataPath
     def __len__(self):
         return len(self.files)
+    @staticmethod
+    def get_img_path(item):
+        _root=item.replace("/pre-processed/rpi_images/x1y0.jpg","")
+        img_path = "%s/pre-processed/rpi_images/x1y0.jpg" % _root
+        return img_path
+    @staticmethod
+    def get_mask_path(item):
+        _root=item.replace("/pre-processed/rpi_images/x1y0.jpg","")
+        seg_path = "%s/pre-processed/overlayed_mask_for_focus_level_0.jpg" % _root
+        return seg_path
     def __getitem__(self, idx):
         _root=self.files[idx].replace("/pre-processed/rpi_images/x1y0.jpg","")
         img_path = "%s/pre-processed/rpi_images/x1y0.jpg" % _root
