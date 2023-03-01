@@ -10,15 +10,36 @@ import torch
 import torchvision.transforms as transforms
 import glob
 
+class TestDataset(torch.utils.data.Dataset):
+    def __init__(self,dataPath,transform=transforms.ToTensor()) -> None:
+        super().__init__()
+        self.files=list(glob.glob(dataPath))
+        self.transform=transform
+    
+    def __len__(self):
+        return len(self.files)
+    
+    def __getitem__(self, idx):
+        img_path=self.files[idx]
+        img = self.transform(Image.open(img_path).convert('RGB'))
+        seg=img.movedim(0,-1)
+        seg=(seg[:1,:,:]<1).numpy()
+        seg = (seg * 255).astype('uint8').repeat(3,axis=0)
+        seg = self.transform(Image.fromarray(seg))[:1]
+        return img * 2 - 1, seg
+        
 class MorphleDataset(torch.utils.data.Dataset):
     def __init__(self, dataPath, sets='train', transform=transforms.ToTensor()):
         super(MorphleDataset, self).__init__()
         files = list(glob.glob(dataPath))
         self.files =list(filter(lambda p:os.path.exists(self.get_mask_path(p)),files))
+        # self.files=self.files[55:56]
         self.transform = transform
         self.datapath = dataPath
     def __len__(self):
         return len(self.files)
+    
+    
     @staticmethod
     def get_img_path(item):
         _root=item.replace("/pre-processed/rpi_images/x1y0.jpg","")

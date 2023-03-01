@@ -18,9 +18,10 @@ parser.add_argument('--iters', type=int, default=300)
 parser.add_argument('--sigma', type=float, default=5.0)
 parser.add_argument('--kernel-size', type=int, default=11)
 parser.add_argument('--reps', type=int, default=2)
-parser.add_argument('--lmbda', type=float, default=0.001)
+parser.add_argument('--lmbda', type=float, default=0.00001)
 parser.add_argument('--scale-factor', type=int, default=1)
 parser.add_argument('--device',  type=str, default='cuda')
+parser.add_argument('--boundary-loss',  type=bool, default=False)
 args = parser.parse_args()
 transformsList=[
     transforms.Resize(args.size, transforms.InterpolationMode.NEAREST),
@@ -39,6 +40,11 @@ elif args.dataset_type=="morphle-lab":
     from utils import save_image
     transform = transforms.Compose(transformsList)
     data = MorphleLabDataset(args.data_path,"test",transform)
+elif args.dataset_type=="test":
+    from torchvision.utils import save_image
+    transformsList.append(transforms.ToTensor())
+    transform = transforms.Compose(transformsList)
+    data = TestDataset(args.data_path,transform)
 else:
     from torchvision.utils import save_image
     transformsList.append(transforms.ToTensor())
@@ -53,6 +59,8 @@ boundary = Boundary().to(args.device)
 
 start_time = time.time()
 img_index=0
+transition_loss_calculator=TransitionLoss()
+continuity_loss_calculator=ContinuityLoss()
 for batch_idx, (x, seg) in enumerate(loader):
     print(len(x))
     print("Batch {}/{}".format(batch_idx+1, len(loader)))
@@ -60,8 +68,18 @@ for batch_idx, (x, seg) in enumerate(loader):
 
     # initializes a mask for each sample in the mini batch as a centered square
     mask = torch.nn.Parameter(torch.zeros(len(x), 1, args.size, args.size).to(args.device))
-    init_start, init_end = args.size//5, args.size - args.size//5
-    mask.data[:,:,init_start:init_end,init_start:init_end].fill_(1.0)
+    num_mask_regions=10
+    import random
+    l = args.size//10
+    
+    for i in range(num_mask_regions):
+
+        
+
+        gap_x=random.randrange(0,x.shape[-2]-l)
+        gap_y=random.randrange(0,x.shape[-1]-l)
+        
+        mask.data[:,:,gap_x:gap_x+l,gap_y:gap_y+l].fill_(1.0)
 
     for i in range(args.iters):
         foreground = x * mask
@@ -72,18 +90,29 @@ for batch_idx, (x, seg) in enumerate(loader):
 
         # inpainting error is equiv to negative coeff. of constraint between foreground and background
         inp_error = neg_coeff_constraint(x, mask, pred_foreground, pred_background)
+        # inp_error = 0 
         # diversity term is the total deviation of foreground and background pixels
-        mask_diversity = diversity(x, mask, foreground, background)
+        mask_diversity = args.lmbda*diversity(x, mask, foreground, background)
+        transition_loss=transition_loss_calculator(x,mask)
+        continuity_loss=continuity_loss_calculator(x,mask)
 
         # regularized IEM objective (to be maximized) is the inpainting error minus diversity regularizer
-        total_loss = inp_error - args.lmbda * mask_diversity
+        total_loss = mask_diversity
+        # total_loss = - args.lmbda * mask_diversity
+        # total_loss=continuity_loss
+        # print ("  ",list(range(continuity_loss.shape[-2])))
+        # for i in range(continuity_loss.shape[-2]):
+        #         print ("%02d"%i,continuity_loss[0,0,i,:].detach().numpy())
+        
+        # print(transition_loss.sum().item(),continuity_loss.sum().item(),args.lmbda *mask_diversity.sum().item())
         total_loss.sum().backward()
 
         with torch.no_grad():
             grad = mask.grad.data
             # we only update mask pixels that are in the boundary AND have non-zero gradient
-            #update_bool = boundary(mask) * (grad != 0)
-            update_bool= (grad != 0)
+            # update_bool = boundary(mask) * (grad != 0)
+            eta=1e-10
+            update_bool= (torch.abs(grad) >eta)
             
             # pixels with positive gradients are set to 1 and with negative gradients are set to 0
             mask.data[update_bool] = (grad[update_bool] > 0).float()
@@ -94,17 +123,22 @@ for batch_idx, (x, seg) in enumerate(loader):
             
             acc, iou, miou, dice = compute_performance(mask, seg)
             print("\tIter {:>3}: InpError {:.3f} IoU {:.3f} DICE {:.3f}".format(i, inp_error.mean().item(), iou, dice))
-        
-    
+            # print("\tIter {:>3}: InpError {:.3f} IoU {:.3f} DICE {:.3f}".format(i, 0, iou, dice))
+        # img_foreground=foreground[0,:,:,:]
+        # save_image(img_foreground,"../../Output/img_%03d_foreground_%03d.png"%(img_index,i))
     for k in range(foreground.shape[0]):
-        save_image(x[k,:,:,:],"../../Output/img_%03d.jpg"%img_index)
-        img_foreground=foreground[k,:,:,:]
-        save_image(img_foreground,"../../Output/img_%03d_foreground.jpg"%img_index)
-        save_image((pred_foreground*mask)[k,:,:,:],"../../Output/img_%03d_foreground_pred.jpg"%img_index)
-        img_background=background[k,:,:,:]
-        save_image(img_background,"../../Output/img_%03d_background.jpg"%img_index)
         
-        save_image((pred_background*(1-mask))[k,:,:,:],"../../Output/img_%03d_background_pred.jpg"%img_index)
+        save_image(x[k,:,:,:],"../../Output/img_%03d.png"%img_index)
+        img_foreground=foreground[k,:,:,:]
+        save_image(img_foreground,"../../Output/img_%03d_foreground.png"%img_index)
+        save_image(seg[k,:,:,:],"../../Output/img_%03d_seg.png"%img_index)
+        save_image((pred_foreground*mask)[k,:,:,:],"../../Output/img_%03d_foreground_pred.png"%img_index)
+        img_background=background[k,:,:,:]
+        save_image(img_background,"../../Output/img_%03d_background.png"%img_index)
+        _b=boundary(mask[k,:,:,:]).to(torch.float)
+        _b=_b.expand(3,-1,-1)
+        save_image(_b,"../../Output/img_%03d_boundary.png"%img_index)
+        save_image((pred_background*(1-mask))[k,:,:,:],"../../Output/img_%03d_background_pred.png"%img_index)
         img_index+=1
 
 
