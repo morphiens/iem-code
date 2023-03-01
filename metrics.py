@@ -22,22 +22,36 @@ def neg_coeff_constraint(x, mask, pred_foreground, pred_background):
 def switch_masks(x, mask, foreground, background):
     #up_diffs
     eta=1e-16
-    mu_foreground = foreground.sum((2,3), keepdim=True) / (mask.sum((2,3), keepdim=True)+eta)
-    mu_background = background.sum((2,3), keepdim=True) / ((1-mask).sum((2,3), keepdim=True)+eta)
+    mu_foreground = foreground.sum((2,3), keepdim=True) / (mask.sum((2,3), keepdim=True))
+    mu_background = background.sum((2,3), keepdim=True) / ((1-mask).sum((2,3), keepdim=True))
 
-    mu_current=mu_foreground.expand(-1,-1,x.shape[-2],x.shape[-1])*mask+mu_background.expand(-1,-1,x.shape[-2],x.shape[-1]*(1-mask))
-    mu_other=mu_foreground.expand(-1,-1,x.shape[-2],x.shape[-1])*(1-mask)+mu_background.expand(-1,-1,x.shape[-2],x.shape[-1]*(mask))
+    mu_current=mu_foreground.expand((-1,-1,x.shape[-2],x.shape[-1]))*mask+mu_background.expand((-1,-1,x.shape[-2],x.shape[-1]))*(1-mask)
+    mu_other=mu_foreground.expand(-1,-1,x.shape[-2],x.shape[-1])*(1-mask)+mu_background.expand(-1,-1,x.shape[-2],x.shape[-1])*mask
     sigma_current=(x-mu_current)
     sigma_other=(x-mu_other)
-    sigma_current=torch.square(sigma_current).sum(dim=-2)
-    sigma_other=torch.square(sigma_other).sum(dim=-2)
-    return sigma_other>sigma_current
+    sigma_current=torch.square(sigma_current).sum(dim=-3,keepdim=True)
+    sigma_other=torch.square(sigma_other).sum(dim=-3,keepdim=True)
+    update_bool= sigma_other<sigma_current
+    return update_bool
 
-
-    
 
     
 def diversity(x, mask, foreground, background):
+    # computes sigma(M;X) + sigma(1-M;X), where:
+    # sigma(M;X) = ||M * (X - mu(X*M))||_2^2
+    # sigma(1-M;X) = ||(1-M) * (X - mu(X*(1-M)))||_2^2
+
+    # here we use the sum over foreground pixels divided by the sum over mask values instead
+    # of the mean over foreground pixels since we don't want to count masked-out pixels
+    mu_foreground = foreground.sum((2,3), keepdim=True) / mask.sum((2,3), keepdim=True)
+    mu_background = background.sum((2,3), keepdim=True) / (1-mask).sum((2,3), keepdim=True)
+
+    sigma_foreground = (mask * (x - mu_foreground)**2).sum((1,2,3))
+    sigma_background = ((1-mask) * (x - mu_background)**2).sum((1,2,3))
+
+    return sigma_foreground + sigma_background
+    
+def diversity_updated(x, mask, foreground, background):
     # computes sigma(M;X) + sigma(1-M;X), where:
     # sigma(M;X) = ||M * (X - mu(X*M))||_2^2
     # sigma(1-M;X) = ||(1-M) * (X - mu(X*(1-M)))||_2^2

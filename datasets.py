@@ -33,7 +33,7 @@ class MorphleDataset(torch.utils.data.Dataset):
         super(MorphleDataset, self).__init__()
         files = list(glob.glob(dataPath))
         self.files =list(filter(lambda p:os.path.exists(self.get_mask_path(p)),files))
-        # self.files=self.files[55:56]
+        self.files=self.files[55:56]
         self.transform = transform
         self.datapath = dataPath
     def __len__(self):
