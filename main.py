@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from metrics import *
 from models import *
 from datasets import *
-from torchvision.utils import save_image
+from torchvision.utils import save_image as save_rgb_image
 
 
 parser = argparse.ArgumentParser(description='Inpainting Error Maximization')
@@ -21,35 +21,34 @@ parser.add_argument('--reps', type=int, default=2)
 parser.add_argument('--lmbda', type=float, default=0.00001)
 parser.add_argument('--scale-factor', type=int, default=1)
 parser.add_argument('--device',  type=str, default='cuda')
-parser.add_argument('--boundary-loss',  type=bool, default=False)
+parser.add_argument('--boundary-loss',action='store_true')
+parser.add_argument('--use-lab',action='store_true')
 args = parser.parse_args()
 transformsList=[
     transforms.Resize(args.size, transforms.InterpolationMode.NEAREST),
     transforms.CenterCrop(args.size),
+    transforms.ToTensor()
     
 ]
 
-
-
-if args.dataset_type=="morphle":
-    from torchvision.utils import save_image
-    transformsList.append(transforms.ToTensor())
-    transform = transforms.Compose(transformsList)
-    data = MorphleDataset(args.data_path,"test",transform)
-elif args.dataset_type=="morphle-lab":
+if args.use_lab:
     from utils import save_image
-    transform = transforms.Compose(transformsList)
-    data = MorphleLabDataset(args.data_path,"test",transform)
-elif args.dataset_type=="test":
-    from torchvision.utils import save_image
-    transformsList.append(transforms.ToTensor())
-    transform = transforms.Compose(transformsList)
-    data = TestDataset(args.data_path,transform)
+    
 else:
     from torchvision.utils import save_image
-    transformsList.append(transforms.ToTensor())
-    transform = transforms.Compose(transformsList)
+    
+transform = transforms.Compose(transformsList)
+
+if args.dataset_type=="morphle":
+    data = MorphleDataset(args.data_path,"test",transform)
+elif args.dataset_type=="test":
+    data = TestDataset(args.data_path,transform)
+else:
     data = FlowersDataset(args.data_path, 'test', transform)
+
+if args.use_lab:
+    data= LabDataset(data)
+
 loader = DataLoader(data, batch_size=args.batch_size, shuffle=False, num_workers=0, pin_memory=True)
 
 # naive inpainting module that uses a Gaussian filter to predict values of masked out pixels
@@ -61,12 +60,14 @@ start_time = time.time()
 img_index=0
 transition_loss_calculator=TransitionLoss()
 continuity_loss_calculator=ContinuityLoss()
+blur=GuassianBlur(args.sigma, args.kernel_size,args.reps)
 with torch.no_grad():
     for batch_idx, (x, seg) in enumerate(loader):
         print(len(x))
         print("Batch {}/{}".format(batch_idx+1, len(loader)))
         x, seg = x.to(args.device), seg.to(args.device)
-
+        # guass_x=x
+        guass_x=blur(x)
         # initializes a mask for each sample in the mini batch as a centered square
         mask = torch.nn.Parameter(torch.zeros(len(x), 1, args.size, args.size).to(args.device))
         num_mask_regions=10
@@ -85,7 +86,8 @@ with torch.no_grad():
         for i in range(args.iters):
             foreground = x * mask
             background = x * (1-mask)
-            update_bool=switch_masks(x,mask,foreground,background)
+            
+            update_bool=switch_masks(guass_x,mask,guass_x*mask,guass_x*(1-mask))    
             if torch.sum(update_bool)==0:
                 break
             
@@ -106,20 +108,25 @@ with torch.no_grad():
             acc, iou, miou, dice = compute_performance(mask, seg)
             # print("\tIter {:>3}: InpError {:.3f} IoU {:.3f} DICE {:.3f}".format(i, inp_error.mean().item(), iou, dice))
             print("\tIter {:>3}: InpError {:.3f} IoU {:.3f} DICE {:.3f}".format(i, 0, iou, dice))
-            img_foreground=foreground[0,:,:,:]
-            save_image(img_foreground,"../../Output/img_%03d_foreground_%03d.png"%(img_index,i))
+            # img_foreground=foreground[0,:,:,:]
+            # save_image(img_foreground,"../../Output/img_%03d_foreground_%03d.png"%(img_index,i))
+        
+        #background vs #foreground contianing tissue
+
+
+
         for k in range(foreground.shape[0]):
             
             save_image(x[k,:,:,:],"../../Output/img_%03d.png"%img_index)
             img_foreground=foreground[k,:,:,:]
             save_image(img_foreground,"../../Output/img_%03d_foreground.png"%img_index)
-            save_image(seg[k,:,:,:],"../../Output/img_%03d_seg.png"%img_index)
+            # save_rgb_image(seg[k,:,:,:],"../../Output/img_%03d_seg.png"%img_index)
             # save_image((pred_foreground*mask)[k,:,:,:],"../../Output/img_%03d_foreground_pred.png"%img_index)
             img_background=background[k,:,:,:]
             save_image(img_background,"../../Output/img_%03d_background.png"%img_index)
             _b=boundary(mask[k,:,:,:]).to(torch.float)
             _b=_b.expand(3,-1,-1)
-            save_image(_b,"../../Output/img_%03d_boundary.png"%img_index)
+            save_rgb_image(_b,"../../Output/img_%03d_boundary.png"%img_index)
             # save_image((pred_background*(1-mask))[k,:,:,:],"../../Output/img_%03d_background_pred.png"%img_index)
             img_index+=1
 

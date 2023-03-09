@@ -19,8 +19,10 @@ def neg_coeff_constraint(x, mask, pred_foreground, pred_background):
     C = C_foreground_given_background + C_background_given_foreground
 
     return -C
+
 def switch_masks(x, mask, foreground, background):
     #up_diffs
+    print(mask.nonzero().shape,(1-mask).nonzero().shape)
     eta=1e-16
     mu_foreground = foreground.sum((2,3), keepdim=True) / (mask.sum((2,3), keepdim=True))
     mu_background = background.sum((2,3), keepdim=True) / ((1-mask).sum((2,3), keepdim=True))
@@ -32,6 +34,7 @@ def switch_masks(x, mask, foreground, background):
     sigma_current=torch.square(sigma_current).sum(dim=-3,keepdim=True)
     sigma_other=torch.square(sigma_other).sum(dim=-3,keepdim=True)
     update_bool= sigma_other<sigma_current
+    
     return update_bool
 
 

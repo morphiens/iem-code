@@ -3,6 +3,27 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.utils import _pair
 
+class GuassianBlur(nn.Module):
+    def __init__(self, sigma, kernel_size,reps):
+        super().__init__()
+        self.reps = reps
+        self.padding = kernel_size//2
+        squared_dists = torch.linspace(-(kernel_size-1)/2, (kernel_size-1)/2, kernel_size)**2
+        gaussian_kernel = torch.exp(-0.5 * squared_dists / sigma**2)
+        gaussian_kernel = (gaussian_kernel / gaussian_kernel.sum()).view(1, 1, kernel_size).repeat(3,1,1)
+        self.register_buffer('gaussian_kernel', gaussian_kernel)
+        
+    def gaussian_filter(self, x):
+        # due to separability we can apply two 1d gaussian filters to get some speedup
+        l=F.pad(x,(0,0,self.padding,self.padding),mode="replicate")
+        v = F.conv2d(l, self.gaussian_kernel.unsqueeze(3), padding=0, groups=x.shape[-3])
+        h = F.conv2d(F.pad(v,(self.padding,self.padding,0,0),mode="replicate"), self.gaussian_kernel.unsqueeze(2), padding=0, groups=x.shape[-3])
+        return h
+    def forward(self,x):
+        u=x
+        for _ in range(self.reps): u = self.gaussian_filter(u)
+        return u
+
 class Inpainter(nn.Module):
     def __init__(self, sigma, kernel_size, reps, scale_factor=1):
         super(Inpainter, self).__init__()

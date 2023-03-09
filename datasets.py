@@ -27,13 +27,36 @@ class TestDataset(torch.utils.data.Dataset):
         seg = (seg * 255).astype('uint8').repeat(3,axis=0)
         seg = self.transform(Image.fromarray(seg))[:1]
         return img * 2 - 1, seg
-        
+    
+
+class LabDataset(torch.utils.data.Dataset):
+    def __init__(self,rgb_dataset) -> None:
+        super().__init__()
+        self.rgb_datset:torch.utils.data.Dataset=rgb_dataset
+        self.pilTransformer=transforms.ToPILImage()
+    def __len__(self):
+        return self.rgb_datset.__len__()
+    def __getitem__(self,idx):
+        img,seg=self.rgb_datset.__getitem__(idx)
+        img=self.pilTransformer((img+1)/2)
+        Lab_orig =ImageCms.applyTransform(img, rgb2lab)
+        L,a,b=Lab_orig.split()
+        l_numpy=np.array(L)
+        a_numpy=np.array(a)
+        b_numpy=np.array(b)
+        _numpy_lab=np.stack((l_numpy,a_numpy,b_numpy),axis=-1)
+        img=torch.tensor(_numpy_lab,dtype=torch.uint8).movedim(-1,0)
+        return pil_to_lab(img),seg
+
+    
+    
+
 class MorphleDataset(torch.utils.data.Dataset):
     def __init__(self, dataPath, sets='train', transform=transforms.ToTensor()):
         super(MorphleDataset, self).__init__()
-        files = list(glob.glob(dataPath))
+        files = list(glob.glob(dataPath))[40:41]
         self.files =list(filter(lambda p:os.path.exists(self.get_mask_path(p)),files))
-        self.files=self.files[55:56]
+        # self.files=self.files[55:56]
         self.transform = transform
         self.datapath = dataPath
     def __len__(self):
@@ -64,7 +87,8 @@ class MorphleDataset(torch.utils.data.Dataset):
             seg = (seg * 255).astype('uint8').repeat(3,axis=2)
             seg = self.transform(Image.fromarray(seg))[:1]
         return img * 2 - 1, seg
-    
+
+
 class MorphleLabDataset(MorphleDataset):
     def __init__(self, dataPath, sets='train', transform=transforms.ToTensor()):
         super(MorphleLabDataset, self).__init__(dataPath=dataPath,sets=sets,transform=transform)
