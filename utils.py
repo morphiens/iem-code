@@ -38,3 +38,9 @@ def save_image(lab,save_file):
     roundTrip=ImageCms.applyTransform(Lab,lab2rgb)
     roundTrip.save(save_file)
 
+
+def masked_mean(_tensor,mask,dim):
+    _ones=torch.ones_like(_tensor)
+    _ones=_ones*mask
+    _tensor=_tensor*mask
+    return torch.sum(_tensor,dim=dim)/torch.sum(_ones,dim=dim)

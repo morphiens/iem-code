@@ -6,21 +6,21 @@ from metrics import *
 from models import *
 from datasets import *
 from torchvision.utils import save_image as save_rgb_image
-
+from utils import masked_mean
 
 parser = argparse.ArgumentParser(description='Inpainting Error Maximization')
 parser.add_argument('data_path', type=str)
 parser.add_argument('--dataset-type',type=str,default='morphle')
-parser.add_argument('--size', type=int, default=128)
+parser.add_argument('--size', type=int, default=1024)
 parser.add_argument('--split', type=str, default='test')
-parser.add_argument('--batch-size', type=int, default=1020)
-parser.add_argument('--iters', type=int, default=300)
-parser.add_argument('--sigma', type=float, default=5.0)
+parser.add_argument('--batch-size', type=int, default=1)
+parser.add_argument('--iters', type=int, default=25)
+parser.add_argument('--sigma', type=float, default=2.0)
 parser.add_argument('--kernel-size', type=int, default=11)
 parser.add_argument('--reps', type=int, default=2)
 parser.add_argument('--lmbda', type=float, default=0.00001)
 parser.add_argument('--scale-factor', type=int, default=1)
-parser.add_argument('--device',  type=str, default='cuda')
+parser.add_argument('--device',  type=str, default='cpu') #cuda can be used alternatively
 parser.add_argument('--boundary-loss',action='store_true')
 parser.add_argument('--use-lab',action='store_true')
 parser.add_argument('--diff-threshold',type=float,default=1)
@@ -65,6 +65,10 @@ blur=GuassianBlur(args.sigma, args.kernel_size,args.reps)
 divisions=5
 with torch.no_grad():
     for batch_idx, (x, seg) in enumerate(loader):
+        # if batch_idx<2:
+        #     continue;
+        # if batch_idx>2:
+        #     break
         print(len(x))
         print("Batch {}/{}".format(batch_idx+1, len(loader)))
         x, seg = x.to(args.device), seg.to(args.device)
@@ -89,6 +93,7 @@ with torch.no_grad():
 
             for i in range(args.iters):
                 background_mask=1-mask
+                #todo move to once every division
                 for pm in all_masks:
                     mask=mask*pm
                     background_mask=background_mask*pm
@@ -121,46 +126,59 @@ with torch.no_grad():
                 # img_foreground=foreground[0,:,:,:]
                 # save_image(img_foreground,"../../Output/img_%03d_foreground_%03d.png"%(img_index,i))
             
-            fg_mean=torch.mean(foreground[:,:,:,:],dim=(-1,-2))
-            bg_mean=torch.mean(background[:,:,:,:],dim=(-1,-2))
+            
+
+            background_mask = (1-mask)*total_mask
+            image_pixels=args.size*args.size
+            foreground_pixels,background_pixels=torch.sum(mask!=0).item()/image_pixels,torch.sum(background_mask!=0).item()/image_pixels
+            total_pixels=foreground_pixels+background_pixels
+            print("Pixel counts %.2f %.2f %.2f"%(total_pixels,foreground_pixels,background_pixels))
+            foreground = x * mask
+            background = x * (background_mask)
+                
+
+            fg_mean=masked_mean(foreground[:,:,:,:],mask,dim=(-1,-2))
+            bg_mean=masked_mean(background[:,:,:,:],background_mask,dim=(-1,-2))
             diff_masked=torch.sqrt(torch.sum(torch.square(fg_mean-bg_mean)))
             print("Iteration",division,diff_masked)
-            # if diff_masked<args.diff_threshold:
-            #     break
+            if diff_masked<args.diff_threshold:
+                break
             switch=False
             if x.shape[0]!=1:
                     raise NotImplementedError
             #make whiter image as foreground
             if len(all_masks)==0:
-                fg_gap=torch.mean(torch.abs(foreground[:,1:,:,:]),dim=(-1,-2,-3))
-                bg_gap=torch.mean(torch.abs(background[:,1:,:,:]),dim=(-1,-2,-3))
-                
+                #only use ab channel
+                fg_gap=torch.sum(torch.square(fg_mean[:,1:]),dim=(-1))
+                bg_gap=torch.sum(torch.square(bg_mean)[:,1:],dim=(-1))
+                print("background hue:",bg_gap)
+                print("foreground hue:",fg_gap)
                 if bg_gap>fg_gap:
                     switch=True
                 
             else:
-                fg_gap=torch.mean(torch.mean(foreground[:,1:,:,:],dim=(-1,-2))-torch.mean(x*(1-total_mask)),axis=-1)
-                bg_gap=torch.mean(torch.mean(background[:,1:,:,:],dim=(-1,-2))-torch.mean(x*(1-total_mask)),axis=-1)
+                fg_gap=torch.mean(torch.abs(masked_mean(foreground[:,:,:,:],mask,dim=(-1,-2))-masked_mean(x*(1-total_mask),(1-total_mask),dim=(-1,-2))),axis=-1)
+                bg_gap=torch.mean(torch.abs(masked_mean(background[:,:,:,:],background_mask,dim=(-1,-2))-masked_mean(x*(1-total_mask),(1-total_mask),dim=(-1,-2))),axis=-1)
+                print("background gap:",bg_gap)
+                print("foreground gap:",fg_gap)
                 if fg_gap>bg_gap:
                     switch=True
             if switch:
-                print("background hue:",fg_gap)
-                print("foreground hue:",bg_gap)
                 
                 mask=1-mask
                 temp=foreground
                 foreground=background
                 background=temp
+                
             else:
-                print("background hue:",fg_gap)
-                print("foreground hue:",bg_gap)
-
+                pass
             all_masks.append(1-mask)
 
             
             for k in range(foreground.shape[0]):
+                os.makedirs("../../Output",exist_ok=True)
                 img_index=batch_idx*args.batch_size+k
-                save_image(x[k,:,:,:]*total_mask[k,:,:,:],"../../Output/img_%03d_%01d.png"%(img_index,division))
+                save_image(x[k,:,:,:]*total_mask[k,:,:,:],"../../Output/img_%03d_%01d_%0.2f.png"%(img_index,division,diff_masked))
                 img_foreground=foreground[k,:,:,:]
                 save_image(img_foreground,"../../Output/img_%03d_foreground_%01d.png"%(img_index,division))
                 # save_rgb_image(seg[k,:,:,:],"../../Output/img_%03d_seg.png"%img_index)
@@ -169,7 +187,7 @@ with torch.no_grad():
                 save_image(img_background,"../../Output/img_%03d_background_%01d.png"%(img_index,division))
                 _b=boundary(mask[k,:,:,:]).to(torch.float)
                 _b=_b.expand(3,-1,-1)
-                save_rgb_image(_b,"../../Output/img_%03d_boundary_%01d.png"%(img_index,division))
+                # save_rgb_image(_b,"../../Output/img_%03d_boundary_%01d.png"%(img_index,division))
                 # save_image((pred_background*(1-mask))[k,:,:,:],"../../Output/img_%03d_background_pred.png"%img_index)
                 
 
