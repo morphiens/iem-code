@@ -23,7 +23,7 @@ parser.add_argument('--scale-factor', type=int, default=1)
 parser.add_argument('--device',  type=str, default='cpu') #cuda can be used alternatively
 parser.add_argument('--boundary-loss',action='store_true')
 parser.add_argument('--use-lab',action='store_true')
-parser.add_argument('--diff-threshold',type=float,default=1)
+parser.add_argument('--diff-threshold',type=float,default=1.5)
 args = parser.parse_args()
 transformsList=[
     transforms.Resize(args.size, transforms.InterpolationMode.NEAREST),
