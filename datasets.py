@@ -54,7 +54,7 @@ class LabDataset(torch.utils.data.Dataset):
 class MorphleDataset(torch.utils.data.Dataset):
     def __init__(self, dataPath, sets='train', transform=transforms.ToTensor()):
         super(MorphleDataset, self).__init__()
-        files = list(glob.glob(dataPath))[40:41]
+        files = list(glob.glob(dataPath))#[40:41]
         self.files =list(filter(lambda p:os.path.exists(self.get_mask_path(p)),files))
         # self.files=self.files[55:56]
         self.transform = transform

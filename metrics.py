@@ -20,22 +20,25 @@ def neg_coeff_constraint(x, mask, pred_foreground, pred_background):
 
     return -C
 
-def switch_masks(x, mask, foreground, background):
+def switch_masks(x, mask, foreground, background,background_mask=None):
     #up_diffs
-    print(mask.nonzero().shape,(1-mask).nonzero().shape)
+    # print(mask.nonzero().shape,(1-mask).nonzero().shape)
     eta=1e-16
+    if background_mask is None:
+        background_mask=1-mask
+    
     mu_foreground = foreground.sum((2,3), keepdim=True) / (mask.sum((2,3), keepdim=True))
-    mu_background = background.sum((2,3), keepdim=True) / ((1-mask).sum((2,3), keepdim=True))
+    mu_background = background.sum((2,3), keepdim=True) / (background_mask.sum((2,3), keepdim=True))
 
-    mu_current=mu_foreground.expand((-1,-1,x.shape[-2],x.shape[-1]))*mask+mu_background.expand((-1,-1,x.shape[-2],x.shape[-1]))*(1-mask)
-    mu_other=mu_foreground.expand(-1,-1,x.shape[-2],x.shape[-1])*(1-mask)+mu_background.expand(-1,-1,x.shape[-2],x.shape[-1])*mask
+    mu_current=mu_foreground.expand((-1,-1,x.shape[-2],x.shape[-1]))*mask+mu_background.expand((-1,-1,x.shape[-2],x.shape[-1]))*background_mask
+    mu_other=mu_foreground.expand(-1,-1,x.shape[-2],x.shape[-1])*background_mask+mu_background.expand(-1,-1,x.shape[-2],x.shape[-1])*mask
     sigma_current=(x-mu_current)
     sigma_other=(x-mu_other)
     sigma_current=torch.square(sigma_current).sum(dim=-3,keepdim=True)
     sigma_other=torch.square(sigma_other).sum(dim=-3,keepdim=True)
     update_bool= sigma_other<sigma_current
     
-    return update_bool
+    return update_bool*((background_mask+mask)==1)
 
 
     
