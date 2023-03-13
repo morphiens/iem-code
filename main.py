@@ -11,11 +11,11 @@ from utils import masked_mean
 parser = argparse.ArgumentParser(description='Inpainting Error Maximization')
 parser.add_argument('data_path', type=str)
 parser.add_argument('--dataset-type',type=str,default='morphle')
-parser.add_argument('--size', type=int, default=1024)
+parser.add_argument('--size', type=int, default=512)
 parser.add_argument('--split', type=str, default='test')
 parser.add_argument('--batch-size', type=int, default=1)
 parser.add_argument('--iters', type=int, default=25)
-parser.add_argument('--sigma', type=float, default=2.0)
+parser.add_argument('--sigma', type=float, default=3)
 parser.add_argument('--kernel-size', type=int, default=11)
 parser.add_argument('--reps', type=int, default=2)
 parser.add_argument('--lmbda', type=float, default=0.00001)
@@ -23,7 +23,7 @@ parser.add_argument('--scale-factor', type=int, default=1)
 parser.add_argument('--device',  type=str, default='cpu') #cuda can be used alternatively
 parser.add_argument('--boundary-loss',action='store_true')
 parser.add_argument('--use-lab',action='store_true')
-parser.add_argument('--diff-threshold',type=float,default=1.5)
+parser.add_argument('--diff-threshold',type=float,default=3)
 args = parser.parse_args()
 transformsList=[
     transforms.Resize(args.size, transforms.InterpolationMode.NEAREST),
@@ -65,9 +65,9 @@ blur=GuassianBlur(args.sigma, args.kernel_size,args.reps)
 divisions=5
 with torch.no_grad():
     for batch_idx, (x, seg) in enumerate(loader):
-        # if batch_idx<2:
+        # if batch_idx<60:
         #     continue;
-        # if batch_idx>2:
+        # if batch_idx>60:
         #     break
         print(len(x))
         print("Batch {}/{}".format(batch_idx+1, len(loader)))
@@ -147,7 +147,7 @@ with torch.no_grad():
             if x.shape[0]!=1:
                     raise NotImplementedError
             #make whiter image as foreground
-            if len(all_masks)==0:
+            if True or len(all_masks)==0:
                 #only use ab channel
                 fg_gap=torch.sum(torch.square(fg_mean[:,1:]),dim=(-1))
                 bg_gap=torch.sum(torch.square(bg_mean)[:,1:],dim=(-1))
@@ -189,8 +189,14 @@ with torch.no_grad():
                 _b=_b.expand(3,-1,-1)
                 # save_rgb_image(_b,"../../Output/img_%03d_boundary_%01d.png"%(img_index,division))
                 # save_image((pred_background*(1-mask))[k,:,:,:],"../../Output/img_%03d_background_pred.png"%img_index)
+                os.makedirs("../../Output_Results",exist_ok=True)            
+                img_index=batch_idx*args.batch_size+k
+                save_image(x[k,:,:,:],"../../Output_Results/img_%03d.input.png"%(img_index))
+                save_image(img_background,"../../Output_Results/img_%03d.output.png"%(img_index))
                 
-
+        
+            
+                
 
 end_time = time.time()
 print("IEM finished in {:.1f} seconds".format(end_time-start_time))
