@@ -1,0 +1,106 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Python: main File Flowers",
+            "type": "python",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "../../Data/3rdParty/flowers/",
+                "--device",
+                "cpu",
+                "--batch-size",
+                "8",
+                "--dataset-type",
+                "flowers"
+            ]
+        },
+        {
+            "name": "Python: main File Morphle",
+            "type": "python",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "../../Data/Morphle/data/slides/uploaded/*/pre-processed/rpi_images/x1y0.jpg",
+                "--device",
+                "cpu",
+                "--batch-size",
+                "1",
+                "--size",
+                "512",
+                "--iters",
+                "25",
+                "--dataset-type",
+                "morphle",
+                "--use-lab",
+                
+                "--kernel-size",
+                "11",
+                "--sigma",
+                "2"
+                
+            ]
+        },
+        {
+            "name": "Python: main File TEST",
+            "type": "python",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "../../Data/Morphle/test-data/img2.png",
+                "--device",
+                "cpu",
+                "--batch-size",
+                "1",
+                "--size",
+                "127",
+                "--iters",
+                "20",
+                "--dataset-type",
+                "test"
+                
+            ]
+        },
+        
+        {
+            "name": "Python: main File TEST SMALL",
+            "type": "python",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "../../Data/Morphle/test-data/img3.png",
+                "--device",
+                "cpu",
+                "--batch-size",
+                "1",
+                "--size",
+                "12",
+                "--iters",
+                "20",
+                "--dataset-type",
+                "test"
+                
+            ]
+        }
+    ]
+}
