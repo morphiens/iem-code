@@ -23,7 +23,7 @@ parser.add_argument('--scale-factor', type=int, default=1)
 parser.add_argument('--device',  type=str, default='cpu') #cuda can be used alternatively
 parser.add_argument('--boundary-loss',action='store_true')
 parser.add_argument('--use-lab',action='store_true')
-parser.add_argument('--diff-threshold',type=float,default=3)
+parser.add_argument('--diff-threshold',type=float,default=1.5)
 args = parser.parse_args()
 transformsList=[
     transforms.Resize(args.size, transforms.InterpolationMode.NEAREST),
@@ -64,7 +64,7 @@ continuity_loss_calculator=ContinuityLoss()
 blur=GuassianBlur(args.sigma, args.kernel_size,args.reps)
 divisions=5
 with torch.no_grad():
-    for batch_idx, (x, seg) in enumerate(loader):
+    for batch_idx, (x, seg,_meta) in enumerate(loader):
         # if batch_idx<60:
         #     continue;
         # if batch_idx>60:
@@ -77,7 +77,7 @@ with torch.no_grad():
         all_masks=[]
         for division in range(divisions-1):
             # initializes a mask for each sample in the mini batch as a centered square
-            mask = torch.nn.Parameter(torch.zeros(len(x), 1, args.size, args.size).to(args.device))
+            mask = torch.nn.Parameter(torch.zeros(len(x), 1, x.shape[-2], x.shape[-1]).to(args.device))
             num_mask_regions=10
             import random
             l = args.size//10
@@ -120,9 +120,9 @@ with torch.no_grad():
                 # smoothing procedure: we set a pixel to 1 if there are 4 or more 1-valued pixels in its 3x3 neighborhood
                 # mask.data = (F.avg_pool2d(mask, 3, 1, 1, divisor_override=1) >= 4).float()
                 
-                acc, iou, miou, dice = compute_performance(mask, seg)
+                # acc, iou, miou, dice = compute_performance(mask, seg)
                 # print("\tIter {:>3}: InpError {:.3f} IoU {:.3f} DICE {:.3f}".format(i, inp_error.mean().item(), iou, dice))
-                print("\tIter {:>3}: InpError {:.3f} IoU {:.3f} DICE {:.3f}".format(i, 0, iou, dice))
+                # print("\tIter {:>3}: InpError {:.3f} IoU {:.3f} DICE {:.3f}".format(i, 0, iou, dice))
                 # img_foreground=foreground[0,:,:,:]
                 # save_image(img_foreground,"../../Output/img_%03d_foreground_%03d.png"%(img_index,i))
             
@@ -141,13 +141,12 @@ with torch.no_grad():
             bg_mean=masked_mean(background[:,:,:,:],background_mask,dim=(-1,-2))
             diff_masked=torch.sqrt(torch.sum(torch.square(fg_mean-bg_mean)))
             print("Iteration",division,diff_masked)
-            if diff_masked<args.diff_threshold:
-                break
+            
             switch=False
             if x.shape[0]!=1:
                     raise NotImplementedError
             #make whiter image as foreground
-            if True or len(all_masks)==0:
+            if len(all_masks)==0:
                 #only use ab channel
                 fg_gap=torch.sum(torch.square(fg_mean[:,1:]),dim=(-1))
                 bg_gap=torch.sum(torch.square(bg_mean)[:,1:],dim=(-1))
@@ -176,24 +175,29 @@ with torch.no_grad():
 
             
             for k in range(foreground.shape[0]):
-                os.makedirs("../../Output",exist_ok=True)
+                if division==0:
+                    _meta_dir=os.path.basename(_meta[k])+"_"
+                    dump_path=os.path.join("../../Data/Output")
+                    os.makedirs(dump_path,exist_ok=True)
+                    save_image(x[k,:,:,:],os.path.join(dump_path,_meta_dir+".png"))
                 img_index=batch_idx*args.batch_size+k
-                save_image(x[k,:,:,:]*total_mask[k,:,:,:],"../../Output/img_%03d_%01d_%0.2f.png"%(img_index,division,diff_masked))
+                save_image(x[k,:,:,:]*total_mask[k,:,:,:],os.path.join(dump_path,_meta_dir+"%01d_%0.2f.png"%(division,diff_masked)))
                 img_foreground=foreground[k,:,:,:]
-                save_image(img_foreground,"../../Output/img_%03d_foreground_%01d.png"%(img_index,division))
+                save_image(img_foreground,os.path.join(dump_path,_meta_dir+"foreground_%01d.png"%(division)))
                 # save_rgb_image(seg[k,:,:,:],"../../Output/img_%03d_seg.png"%img_index)
                 # save_image((pred_foreground*mask)[k,:,:,:],"../../Output/img_%03d_foreground_pred.png"%img_index)
                 img_background=background[k,:,:,:]
-                save_image(img_background,"../../Output/img_%03d_background_%01d.png"%(img_index,division))
-                _b=boundary(mask[k,:,:,:]).to(torch.float)
+                save_image(img_background,os.path.join(dump_path,_meta_dir+"background_%01d.png"%(division)))
+                _b=boundary(mask[k:k+1,:,:,:]).to(torch.float)[0,:,:,:]
                 _b=_b.expand(3,-1,-1)
                 # save_rgb_image(_b,"../../Output/img_%03d_boundary_%01d.png"%(img_index,division))
                 # save_image((pred_background*(1-mask))[k,:,:,:],"../../Output/img_%03d_background_pred.png"%img_index)
-                os.makedirs("../../Output_Results",exist_ok=True)            
+                os.makedirs(os.path.join("../../Data/Output_Results"),exist_ok=True)            
                 img_index=batch_idx*args.batch_size+k
-                save_image(x[k,:,:,:],"../../Output_Results/img_%03d.input.png"%(img_index))
-                save_image(img_background,"../../Output_Results/img_%03d.output.png"%(img_index))
-                
+                save_image(x[k,:,:,:],os.path.join("../../Data/Output_Results",_meta_dir+"%03d.input.png"%(img_index)))
+                save_image(img_background,os.path.join("../../Data/Output_Results",_meta_dir+"%03d.output.png"%(img_index)))
+            if diff_masked<args.diff_threshold:
+                break
         
             
                 

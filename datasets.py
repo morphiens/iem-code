@@ -37,7 +37,11 @@ class LabDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self.rgb_datset.__len__()
     def __getitem__(self,idx):
-        img,seg=self.rgb_datset.__getitem__(idx)
+        _tuple=self.rgb_datset.__getitem__(idx)
+        if len(_tuple)==2:
+            img,seg=_tuple
+        else:
+            img,seg,_meta=_tuple
         img=self.pilTransformer((img+1)/2)
         Lab_orig =ImageCms.applyTransform(img, rgb2lab)
         L,a,b=Lab_orig.split()
@@ -46,7 +50,11 @@ class LabDataset(torch.utils.data.Dataset):
         b_numpy=np.array(b)
         _numpy_lab=np.stack((l_numpy,a_numpy,b_numpy),axis=-1)
         img=torch.tensor(_numpy_lab,dtype=torch.uint8).movedim(-1,0)
-        return pil_to_lab(img),seg
+        if len(_tuple)==2:
+            return pil_to_lab(img),seg
+        else:
+            return pil_to_lab(img),seg,_meta
+        
 
     
     
@@ -65,17 +73,19 @@ class MorphleDataset(torch.utils.data.Dataset):
     
     @staticmethod
     def get_img_path(item):
-        _root=item.replace("/pre-processed/rpi_images/x1y0.jpg","")
-        img_path = "%s/pre-processed/rpi_images/x1y0.jpg" % _root
-        return img_path
+        # _root=item[:item.index("/pre-processed")]
+        # img_path = "%s/pre-processed/rpi_images/x1y0.jpg" % _root
+        return item
     @staticmethod
     def get_mask_path(item):
-        _root=item.replace("/pre-processed/rpi_images/x1y0.jpg","")
+        _root=item[:item.index("/pre-processed")]
         seg_path = "%s/pre-processed/overlayed_mask_for_focus_level_0.jpg" % _root
         return seg_path
     def __getitem__(self, idx):
-        _root=self.files[idx].replace("/pre-processed/rpi_images/x1y0.jpg","")
-        img_path = "%s/pre-processed/rpi_images/x1y0.jpg" % _root
+        item=self.files[idx]
+        _root=item[:item.index("/pre-processed")]
+        # img_path = "%s/pre-processed/rpi_images/x1y0.jpg" % _root
+        img_path=self.files[idx]
         seg_path = "%s/pre-processed/overlayed_mask_for_focus_level_0.jpg" % _root
         img = self.transform(Image.open(img_path))
         
@@ -86,42 +96,7 @@ class MorphleDataset(torch.utils.data.Dataset):
             seg = 1 - ((seg[:,:,0:1] == 0) + (seg[:,:,1:2] == 0) + (seg[:,:,2:3] == 0))
             seg = (seg * 255).astype('uint8').repeat(3,axis=2)
             seg = self.transform(Image.fromarray(seg))[:1]
-        return img * 2 - 1, seg
-
-
-class MorphleLabDataset(MorphleDataset):
-    def __init__(self, dataPath, sets='train', transform=transforms.ToTensor()):
-        super(MorphleLabDataset, self).__init__(dataPath=dataPath,sets=sets,transform=transform)
-        
-        self.toTensorTransform=transforms.ToTensor()
-    def __getitem__(self, idx):
-        _root=self.files[idx].replace("/pre-processed/rpi_images/x1y0.jpg","")
-        img_path = "%s/pre-processed/rpi_images/x1y0.jpg" % _root
-        seg_path = "%s/pre-processed/overlayed_mask_for_focus_level_0.jpg" % _root
-        img = Image.open(img_path)
-        img = self.transform(img)
-
-        Lab_orig =ImageCms.applyTransform(img, rgb2lab)
-        L,a,b=Lab_orig.split()
-        l_numpy=np.array(L)
-        a_numpy=np.array(a)
-        b_numpy=np.array(b)
-        _numpy_lab=np.stack((l_numpy,a_numpy,b_numpy),axis=-1)
-        img=torch.tensor(_numpy_lab,dtype=torch.uint8)
-
-        
-        
-        
-        seg=img*0
-        if os.path.exists(seg_path):
-            seg = np.array(Image.open(seg_path))
-            seg = 1 - ((seg[:,:,0:1] == 0) + (seg[:,:,1:2] == 0) + (seg[:,:,2:3] == 0))
-            seg = (seg * 255).astype('uint8').repeat(3,axis=2)
-            seg = self.transform(Image.fromarray(seg))
-        img=img.movedim(-1,0)
-        # save_image(img,"save-image.jpg")
-        return pil_to_lab(img),self.toTensorTransform(seg)
-        # return img * 2 - 1, seg
+        return img * 2 - 1, seg,_root+"_"+os.path.basename(img_path)
 
 class FlowersDataset(torch.utils.data.Dataset):
     # from https://github.com/mickaelChen/ReDO/blob/master/datasets.py
