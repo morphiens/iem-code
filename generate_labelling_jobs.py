@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import shutil
 input_images_pattern="../../Data/Output/*.png"
 output_images_dir="../../Data/ByTissueType"
 
@@ -31,7 +32,7 @@ for _file in glob.glob(input_images_pattern):
         tissue_type=getTissueType(_file)
         _dir=os.path.join(output_images_dir,tissue_type)
         os.makedirs(_dir,exist_ok=True)
-        os.symlink(os.path.abspath(_file),os.path.join(_dir,os.path.basename(_file)))
+        shutil.move(_file,os.path.join(_dir,os.path.basename(_file)))
     except:
         logging.exception("Failed to process %s",_file)
     

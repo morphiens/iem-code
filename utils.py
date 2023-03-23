@@ -32,10 +32,16 @@ def lab_to_pil(_tensor,channel_last=False):
         return np.stack([l,a,b],axis=-1 if channel_last else 0)
 def save_image(lab,save_file):
     _tensor=lab_to_pil(lab).movedim(0,-1)
-    
+    _arr=lab.movedim(0,-1)[:,:,:1].detach().cpu().numpy().astype(np.uint8)
+    mask=_arr!=0
     Lab=Image.fromarray(_tensor.detach().cpu().numpy().astype(np.uint8))
     
     roundTrip=ImageCms.applyTransform(Lab,lab2rgb)
+    #fix for pil to lab conversion, doesn't preserve pure blacks
+    roundTrip=np.array(roundTrip)
+    roundTrip=roundTrip*mask
+    roundTrip=Image.fromarray(roundTrip)
+
     roundTrip.save(save_file)
 
 
